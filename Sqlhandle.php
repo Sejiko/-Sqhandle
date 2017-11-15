@@ -111,12 +111,12 @@ class Sqlhandle extends PDO{
 		$result = $obj->fetchAll(PDO::FETCH_ASSOC);
 
 		if($index){
-			$orderedResult = array();
+			$structuredResult = array();
 			foreach($result as $value){
-				$orderedResult[$value[$index]] = $value;
+				$structuredResult[$value[$index]] = $value;
 			}
 
-			return $orderedResult;
+			return $structuredResult;
 		}
 
 		return $result;
@@ -146,35 +146,49 @@ class Sqlhandle extends PDO{
 		if(count($fields) === 0){
 			$query .= '* ';
 		} else{
-			$query .= str_repeat('$, ', count($fields) - 1).'$ ';
+			$query .= $this->makeParameterList('$', count($fields) - 1);
 		}
 
 		$query .= 'FROM $';
 
-		$whereData = array();
-		$whereFields = array();
 		if($where){
-			$query .= ' WHERE 1 = 1';	//TODO fix
-
-			foreach($where as $field => $value){
-				$query .= ' AND $ = ?';
-
-				$whereData[] = $value;
-				$whereFields[] = $field;
-			}
+			$whereData = $this->generateWhereQuery($where);
+			$query .= $whereData['query'];
 		}
 
 		$query .= ';';
 
-		$completeData = array_merge($fields, [$table], $whereFields, $whereData);
+		$completeData = array_merge($fields, [$table], $whereData['fields'], $whereData['values']);
 
 		return $this->prepare($query, $completeData, $index);
+	}
+
+	private function makeParameterList($string, $times){
+		return str_repeat($string.', ', $times).$string.' ';
+	}
+
+	private function generateWhereQuery($where){
+		$result = array( 'query' => ' WHERE', 'values' => [], 'fields' => [] );
+		$start = true;
+
+		foreach($where as $field => $value){
+			if($start){
+				$result['query'] .= ' $ = ?';
+			} else{
+				$result['query'] .= ' AND $ = ?';
+			}
+
+			$result['values'][] = $value;
+			$result['fields'][] = $field;
+		}
+
+		return $result;
 	}
 
 	public function getRow($table, $where = false, $fields = []){
 		$result = $this->getRows($table, false, $where, $fields);
 
-		if(count($result) !== 1){
+		if(count($result) !== 1 || !isset($result[0])){
 			return false;
 		}
 
@@ -188,12 +202,12 @@ class Sqlhandle extends PDO{
 
 		if(!empty($fields)){
 			$query .= '(';
-			$query .= str_repeat('$, ', count($fields) - 1).'$ ';
+			$query .= $this->makeParameterList('$', count($fields) - 1);
 			$query .= ')';
 		}
 
 		$query .= 'VALUES (';
-		$query .= str_repeat('?, ', count($data) - 1).'? ';
+		$query .= $this->makeParameterList('?', count($data) - 1);
 		$query .= ');';
 
 		return $this->prepare($query, $completeData);
@@ -205,16 +219,12 @@ class Sqlhandle extends PDO{
 		}
 
 		$query = 'UPDATE $ SET ';
-		$query .= str_repeat('$ = ?, ', count($fields) - 1).'$ = ? ';
+		$query .= $this->makeParameterList('$ = ?', count($fields) - 1);
 
-		foreach($where as $field => $value){
-			$query .= 'WHERE $ = ? ';
+		$whereData = $this->generateWhereQuery($where);
+		$query .= $whereData['query'];
 
-			$data[] = $value;
-			$fields[] = $field;
-		}
-
-		$completeData = array_merge([$table], $fields, $data);
+		$completeData = array_merge([$table], $fields, $whereData['fields'], $data, $whereData['values']);
 
 		return $this->prepare($query, $completeData);
 	}
