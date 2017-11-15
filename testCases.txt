@@ -1,0 +1,31 @@
+/*
+ * TODO Add DB fetchMap ($query, $index, $data = [])
+ * TODO think about additional functionality
+ *		x - UPDATE (Table, Values, [ID'sS?])
+ *		x - INSERT (Table, Values)
+ *		x - SELECT (Table, [fields], [OrderBy])
+ *		- JOIN ?!
+*/
+
+$sql = new Sqlhandle();
+$sql->setDbName('test');
+
+echo '<textarea>';
+
+/*$data = ['testable', 'id', 'message', 6, 'hello'];
+var_dump($sql->prepare('SELECT * FROM $ WHERE $ = ? and $ = ?', $data));
+$data = ['testable'];
+var_dump($sql->prepare('SELECT * FROM $', $data, 'id'));*/
+
+//var_dump($sql->getRows('testable', 'id', ['id' => 4], ['id', 'timestamp']));
+var_dump($sql->getRow('testable', ['id' => 4], ['id', 'timestamp']));
+var_dump($sql->getRow('testable', ['message' => 'hi'], ['id', 'timestamp']));
+
+//var_dump($sql->setRow('testable', [NULL, 'you', 'hi', time()]));
+//var_dump($sql->setRow('testable', ['you', 'hi', time()], ['user', 'message', 'timestamp']));
+
+//var_dump($sql->changeRow('testable', [4, 'you', 'hi', time()], ['id' => 4]));
+
+var_dump($sql->lastQuerry);
+
+echo '</textarea>';
