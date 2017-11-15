@@ -143,10 +143,11 @@ class Sqlhandle extends PDO{
 	public function getRows($table, $index = false, $where = false, $fields = []){
 		$query = 'SELECT ';
 
-		if(count($fields) === 0){
+		$fieldCount = count($fields);
+		if($fieldCount === 0){
 			$query .= '* ';
 		} else{
-			$query .= $this->makeParameterList('$', count($fields) - 1);
+			$query .= $this->makeParameterList('$', $fieldCount - 1);
 		}
 
 		$query .= 'FROM $';
@@ -174,6 +175,7 @@ class Sqlhandle extends PDO{
 		foreach($where as $field => $value){
 			if($start){
 				$result['query'] .= ' $ = ?';
+				$start = false;
 			} else{
 				$result['query'] .= ' AND $ = ?';
 			}
