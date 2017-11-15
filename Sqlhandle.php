@@ -79,7 +79,7 @@ class Sqlhandle extends PDO{
 
 	public function getColumnNames($table){
 		$data = [$table];
-		$query = $this->prePrepare('DESCRIBE $table', $data);
+		$query = $this->prePrepare('DESCRIBE $', $data);
 
 		return $this->doQuery($query);
 	}
@@ -94,7 +94,7 @@ class Sqlhandle extends PDO{
 		return false;
 	}
 
-	public function prepare($query, $data = []){
+	public function prepare($query, $data = [], $index = false){
 		$query = $this->prePrepare($query, $data);
 
 		$obj = parent::prepare($query);
@@ -108,7 +108,18 @@ class Sqlhandle extends PDO{
 			return $this->errorInfo();
 		}
 
-		return $obj->fetchAll(PDO::FETCH_ASSOC);
+		$result = $obj->fetchAll(PDO::FETCH_ASSOC);
+
+		if($index){
+			$orderedResult = array();
+			foreach($result as $value){
+				$orderedResult[$value[$index]] = $value;
+			}
+
+			return $orderedResult;
+		}
+
+		return $result;
 	}
 
 	private function prePrepare($query, &$data){
@@ -127,6 +138,85 @@ class Sqlhandle extends PDO{
 		str_replace('$$', '$', $query);
 
 		return $query;
+	}
+
+	public function getRows($table, $index = false, $where = false, $fields = []){
+		$query = 'SELECT ';
+
+		if(count($fields) === 0){
+			$query .= '* ';
+		} else{
+			$query .= str_repeat('$, ', count($fields) - 1).'$ ';
+		}
+
+		$query .= 'FROM $';
+
+		$whereData = array();
+		$whereFields = array();
+		if($where){
+			$query .= ' WHERE 1 = 1';	//TODO fix
+
+			foreach($where as $field => $value){
+				$query .= ' AND $ = ?';
+
+				$whereData[] = $value;
+				$whereFields[] = $field;
+			}
+		}
+
+		$query .= ';';
+
+		$completeData = array_merge($fields, [$table], $whereFields, $whereData);
+
+		return $this->prepare($query, $completeData, $index);
+	}
+
+	public function getRow($table, $where = false, $fields = []){
+		$result = $this->getRows($table, false, $where, $fields);
+
+		if(count($result) !== 1){
+			return false;
+		}
+
+		return $result[0];
+	}
+
+	public function setRow($table, $data, $fields = []){
+		$query = 'INSERT INTO $ ';
+		$completeData = array_merge([$table], $fields);
+		$completeData = array_merge($completeData, $data);
+
+		if(!empty($fields)){
+			$query .= '(';
+			$query .= str_repeat('$, ', count($fields) - 1).'$ ';
+			$query .= ')';
+		}
+
+		$query .= 'VALUES (';
+		$query .= str_repeat('?, ', count($data) - 1).'? ';
+		$query .= ');';
+
+		return $this->prepare($query, $completeData);
+	}
+
+	public function changeRow($table, $data, $where, $fields = []){
+		if(empty($fields)){
+			$fields = $this->getColumnNames($table);
+		}
+
+		$query = 'UPDATE $ SET ';
+		$query .= str_repeat('$ = ?, ', count($fields) - 1).'$ = ? ';
+
+		foreach($where as $field => $value){
+			$query .= 'WHERE $ = ? ';
+
+			$data[] = $value;
+			$fields[] = $field;
+		}
+
+		$completeData = array_merge([$table], $fields, $data);
+
+		return $this->prepare($query, $completeData);
 	}
 }
 
