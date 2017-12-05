@@ -1,5 +1,12 @@
 <?php
 
+/**
+ * Sqlhandle: A class to siplify the usage of the PDO class
+ *
+ * @autor Florian Heidebrecht
+ * edited by Philipp Caldwell
+ *
+ */
 class Sqlhandle extends PDO{
 
 	private $host;
@@ -34,25 +41,15 @@ class Sqlhandle extends PDO{
 		return true;
 	}
 
-	private function doQuery($query, $mode = PDO::FETCH_COLUMN){
-		$obj = $this->query($query);
-
-		if($obj){
-			return $obj->fetchAll($mode);
-		}
-
-		return NULL;
-	}
-
 	public function getDatabaseNames(){
-		return $this->doQuery('SHOW DATABASES');
+		return $this->prepare('SHOW DATABASES');
 	}
 
 	public function getTableNames(){
-		$data = [$this->dbName];
-		$query = $this->prePrepare('SHOW TABLES IN $other', $data);
+		$database = [$this->dbName];
+		$query = 'SHOW TABLES IN %d';
 
-		return $this->doQuery($query);
+		return $this->prepare($query, NULL, NULL, NULL, $database);
 	}
 
 	public function tableExists($table){
@@ -65,11 +62,10 @@ class Sqlhandle extends PDO{
 		return false;
 	}
 
-	public function getColumnNames($table){
-		$data = [$table];
-		$query = $this->prePrepare('DESCRIBE $table', $data);
-
-		return $this->doQuery($query);
+	public function getColumnNames($tableName){
+		$table = [$tableName];
+		$query = 'Describe %t';
+		return $this->prepare($query, $table);
 	}
 
 	public function columExists($table, $column){
@@ -82,41 +78,103 @@ class Sqlhandle extends PDO{
 		return false;
 	}
 
-	public function prepare($query, $data = []){
-		$query = $this->prePrepare($query, $data);
-
+	public function prepare($query, $tables = [], $columns = [], $values = [], $database = []){
+		$this->preEvaluation($query, $tables, $columns, $database);
 		$obj = parent::prepare($query);
 		$this->lastQuerry = $query;
 
-		foreach($data as $key => $val){
-			$obj->bindValue($key + 1, $val);
+		foreach($values as $key => $value){
+			$obj->bindValue($key += 1, $value);
 		}
 
 		if(!$obj->execute()){
 			return $this->errorInfo();
 		}
 
-		return $obj->fetchAll(PDO::FETCH_ASSOC);
+		$result = $obj->fetchAll(PDO::FETCH_ASSOC);
+
+		return $result;
 	}
 
-	private function prePrepare($query, &$data){
-		$pattern = '/(?<!\$)\$(?!\$)/';
+	private function preEvaluation(&$rawquery, $tables = [], $columns = [], $database = []){
+		$rawquery = preg_replace_callback("/%(?'amt'\d+)(?'el'\w+|\?)/", function($matches){
 
-		$numberOfMatches = preg_match_all($pattern, $query);
+			if($matches['el'] != '?'){
+				$matches['el'] = '%' . $matches['el'];
+			}
 
-		for($i = 0; $i < $numberOfMatches; $i++){
-			if(preg_match('/^\w+$/', $data[0])){
-				$query = preg_replace($pattern, array_shift($data), $query, 1);
+			return implode(',', array_fill(0, $matches['amt'], $matches['el']));
+		}, $rawquery);
+
+		$this->bindValuesToQuery($rawquery, 't', $tables);
+		$this->bindValuesToQuery($rawquery, 'c', $columns);
+		$this->bindValuesToQuery($rawquery, 'd', $database);
+
+		return true;
+	}
+
+	public function bindValuesToQuery(&$query, $label, $data = []){
+		foreach($data as $value){
+			if(preg_match('/^\w+$/', $value)){
+				$query = preg_replace('/%' . $label . '/', $value, $query, 1);
 			} else{
 				return false;
 			}
 		}
-
-		str_replace('$$', '$', $query);
-
 		return $query;
 	}
 
-}
+	//TODO Fix Where
+	public function select($tableName, $cloumns, $where = 'WHERE 1=1'){
+		$countColumns = count($cloumns);
+		$table = [$tableName];
 
+		$tableSelector = '*';
+		if($countColumns > 0){
+			//%8c as example
+			$tableSelector = '%' . $countColumns . 'c';
+		}
+
+		$query = 'SELECT ' . $tableSelector . ' ' . $where;
+
+		$this->prepare($query, $table, $cloumns);
+	}
+
+	public function insert($tableName, $cloumns, $values = [], $where = 'WHERE 1=1'){
+		$countColumns = count($cloumns);
+		$table = [$tableName];
+
+		$replacer = '*';
+		if($countColumns > 0){
+			$replacer = '%' . $countColumns;
+		}
+		$query = "Insert Into %t " . $replacer . "c VALUES (%" . $countColumns . '?' . ") " . $where . ';';
+
+		$this->prepare($query, $table, $cloumns, $values);
+	}
+
+	public function update_($tableName, $cloumnsString, $where = 'WHERE 1=1'){
+		$table = [$tableName];
+		$query = 'UPDATE %t SET' . $cloumnsString . ' ' . $where . ';';
+
+		$this->prepare($query, $table, [], $values);
+	}
+
+	public function delete($tableName, $where = 'WHERE 1=1'){
+		$table = [$tableName];
+		$query = "DELETE FROM %t " . $where . ';';
+
+		$this->prepare($query, $table);
+	}
+
+	public function fetchResult($data, $columnName = 'id', $mode = ''){
+		$structuredResult = array();
+		foreach($data as $value){
+			$structuredResult[$value[$columnName]] = $value;
+		}
+
+		return $structuredResult;
+	}
+
+}
 ?>
